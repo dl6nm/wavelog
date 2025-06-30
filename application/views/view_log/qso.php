@@ -422,7 +422,7 @@
 
                     <?php if($row->COL_SIG != null) { ?>
                     <tr>
-                        <td><?= __("Sig"); ?></td>
+                        <td><?= __("SIG"); ?></td>
                         <?php
                         switch ($row->COL_SIG) {
                         case "GMA":
@@ -438,7 +438,7 @@
 
                     <?php if($row->COL_SIG_INFO != null) { ?>
                     <tr>
-                        <td><?= __("Sig Info"); ?></td>
+                        <td><?= __("SIG Info"); ?></td>
                         <?php
                         switch ($row->COL_SIG) {
                         case "GMA":
@@ -529,7 +529,7 @@
 
                     <?php if($row->COL_LOTW_QSL_RCVD == "Y" && $row->COL_LOTW_QSLRDATE != null) { ?>
                     <h3><?= __("LoTW"); ?></h3>
-                    <p><?= __("This QSO was confirmed on"); ?> <?php $timestamp = strtotime($row->COL_LOTW_QSLRDATE); echo date($custom_date_format, $timestamp); ?>.</p>
+                    <p><?= __("This QSO was confirmed on"); ?> <?php $timestamp = strtotime($row->COL_LOTW_QSLRDATE); echo date($custom_date_format, $timestamp); if (date('H:i', $timestamp) != '00:00') { echo " ".date('H:i', $timestamp);?> UTC<?php } ?>.</p>
                     <?php } ?>
 
 					<?php if($row->COL_LOTW_QSL_RCVD == "Y" && $row->COL_LOTW_QSLRDATE == null) { ?>
@@ -723,12 +723,12 @@
 
                     <?php if($row->station_sig) { ?>
                     <tr>
-                        <td><?= __("Station") . ' ' . __("Sig"); ?></td>
+                        <td><?= __("Station") . ' ' . __("SIG"); ?></td>
                         <td><?php echo $row->station_sig; ?></td>
                     </tr>
 
                     <tr>
-                        <td><?= __("Station") . ' ' . __("Sig Info"); ?></td>
+                        <td><?= __("Station") . ' ' . __("SIG Info"); ?></td>
                         <td><?php echo $row->station_sig_info; ?></td>
                     </tr>
                     <?php } ?>

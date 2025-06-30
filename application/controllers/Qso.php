@@ -13,10 +13,11 @@ class QSO extends CI_Controller {
 
 	public function index() {
 		$this->load->model('cat');
+		$this->load->library('qra');
 		$this->load->model('stations');
 		$this->load->model('logbook_model');
 		$this->load->model('user_model');
-		$this->load->model('modes');
+		$this->load->model('usermodes');
 		$this->load->model('bands');
 		if(!$this->user_model->authorize(2)) { $this->session->set_flashdata('error', __("You're not allowed to do that!")); redirect('dashboard'); }
 
@@ -39,8 +40,9 @@ class QSO extends CI_Controller {
 		$data['query'] = $this->logbook_model->last_custom($this->session->userdata('qso_page_last_qso_count'));
 		$data['dxcc'] = $this->logbook_model->fetchDxcc();
 		$data['iota'] = $this->logbook_model->fetchIota();
-		$data['modes'] = $this->modes->active();
+		$data['modes'] = $this->usermodes->active();
 		$data['bands'] = $this->bands->get_user_bands_for_qso_entry();
+		[$data['lat'], $data['lng']] = $this->qra->qra2latlong($this->stations->gridsquare_from_station($this->stations->find_active()));
 		$data['user_default_band'] = $this->session->userdata('user_default_band');
 		$data['sat_active'] = array_search("SAT", $this->bands->get_user_bands(), true);
 
@@ -101,6 +103,11 @@ class QSO extends CI_Controller {
 		$options_object = $this->user_options_model->get_options('eqsl_default_qslmsg',array('option_name'=>'key_station_id','option_key'=>$data['active_station_profile']))->result();
 		$data['qslmsg'] = (isset($options_object[0]->option_value))?$options_object[0]->option_value:'';
 
+		$footerData = [];
+		$footerData['scripts'] = [
+			'assets/js/leaflet/geocoding.js',
+		];
+
 		if ($this->form_validation->run() == FALSE) {
 			$data['page_title'] = __("Add QSO");
 			if (validation_errors() != '') {	// we're coming from a failed ajax-call
@@ -108,7 +115,7 @@ class QSO extends CI_Controller {
 			} else {	// we're not coming from a POST
 				$this->load->view('interface_assets/header', $data);
 				$this->load->view('qso/index');
-				$this->load->view('interface_assets/footer');
+				$this->load->view('interface_assets/footer', $footerData);
 			}
 		} else {
 			// Store Basic QSO Info for reuse
@@ -607,8 +614,10 @@ class QSO extends CI_Controller {
 
 	public function get_station_power() {
 		$this->load->model('stations');
+		$this->load->library('qra');
 		$stationProfile = $this->input->post('stationProfile', TRUE);
 		$data = array('station_power' => $this->stations->get_station_power($stationProfile));
+		[$data['lat'], $data['lng']] = $this->qra->qra2latlong($this->stations->gridsquare_from_station($stationProfile));
 
 		header('Content-Type: application/json');
 		echo json_encode($data);
@@ -668,7 +677,7 @@ class QSO extends CI_Controller {
 
 	/**
 	 * Open the API url which causes the browser to open the QSO live logging and populate the callsign with the data from the API
-	 * 
+	 *
 	 * Usage example:
 	 * 			https://<URL to Wavelog>/index.php/qso/log_qso?callsign=4W7EST
 	 */
@@ -697,7 +706,7 @@ class QSO extends CI_Controller {
 	}
 
 	/**
-	 * Easy modal Loader 
+	 * Easy modal Loader
 	 * Used for Share Modal in QSO Details view
 	 */
 	function getShareModal() {
@@ -710,5 +719,9 @@ class QSO extends CI_Controller {
 		}
 
 		$this->load->view('qso/components/share_modal', $data, false);
+	}
+
+	function getAwardTabs() {
+		$this->load->view('qso/award_tabs');
 	}
 }

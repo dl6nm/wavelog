@@ -30,7 +30,6 @@
 
 	<?php if(validation_errors()) { ?>
     <div class="alert alert-danger">
-    	<a class="btn-close" data-bs-dismiss="alert">x</a>
  		<?php echo validation_errors(); ?>
     </div>
 	<?php } ?>
@@ -226,17 +225,6 @@
 										</select>
 										<small id="user_measurement_base_Help" class="form-text text-muted"><?= __("Choose which unit distances will be shown in"); ?></small>
 									</div>
-
-									<div class="mb-3">
-										<label for="user_dashboard_map"><?= __("Show Dashboard Map"); ?></label>
-										<?php if(!isset($user_dashboard_map)) { $user_dashboard_map='Y'; }?>
-										<select class="form-select" id="user_dashboard_map" name="user_dashboard_map" aria-describedby="user_dashboard_map_Help" required>
-											<option value='Y' <?php if($user_dashboard_map == "Y") { echo "selected=\"selected\""; } ?>><?= __("Yes"); ?></option>
-											<option value='map_at_right' <?php if($user_dashboard_map == "map_at_right") { echo "selected=\"selected\""; } ?>><?= __("Map at right"); ?></option>
-											<option value='N' <?php if($user_dashboard_map == "N") { echo "selected=\"selected\""; } ?>><?= __("No"); ?></option>
-										</select>
-										<small id="user_dashboard_map_Help" class="form-text text-muted"><?= __("Choose whether to show map on dashboard or not"); ?></small>
-									</div>
 								</div>
 							</div>
 						</div>
@@ -360,6 +348,7 @@
 											<option value="Name" <?php if ($user_column5 == "Name") { echo " selected =\"selected\""; } ?>><?= __("Name"); ?></option>
 											<option value="Location" <?php if ($user_column5 == "Location") { echo " selected =\"selected\""; } ?>><?= __("Station Location"); ?></option>
 											<option value="Bearing" <?php if ($user_column5 == "Bearing") { echo " selected =\"selected\""; } ?>><?= __("Bearing"); ?></option>
+											<option value="Propagation" <?php if ($user_column5 == "Propagation") { echo " selected =\"selected\""; } ?>><?= __("Propagation"); ?></option>
 										</select>
 									</div>
 								</div>
@@ -623,6 +612,28 @@
 													printf("<option value=\"{$i}\"{$selected_attribute_value}>{$i}</option>");
 												} ?>
 											</select>
+											<small id="SelectDateFormatHelp" class="form-text text-muted"><?= __("Choose the number of latest QSOs to be displayed on dashboard."); ?></small>
+										</div>
+
+										<div class="mb-3">
+											<label for="user_dashboard_map"><?= __("Show Dashboard Map"); ?></label>
+											<?php if(!isset($user_dashboard_map)) { $user_dashboard_map='Y'; }?>
+											<select class="form-select" id="user_dashboard_map" name="user_dashboard_map" aria-describedby="user_dashboard_map_Help" required>
+												<option value='Y' <?php if($user_dashboard_map == "Y") { echo "selected=\"selected\""; } ?>><?= __("Yes"); ?></option>
+												<option value='map_at_right' <?php if($user_dashboard_map == "map_at_right") { echo "selected=\"selected\""; } ?>><?= __("Map at right"); ?></option>
+												<option value='N' <?php if($user_dashboard_map == "N") { echo "selected=\"selected\""; } ?>><?= __("No"); ?></option>
+											</select>
+											<small id="user_dashboard_map_Help" class="form-text text-muted"><?= __("Choose whether to show map on dashboard or not"); ?></small>
+										</div>
+
+										<div class="mb-3">
+											<label for="user_dashboard_banner"><?= __("Dashboard Notification Banner"); ?></label>
+											<?php if(!isset($user_dashboard_banner)) { $user_dashboard_banner='Y'; }?>
+											<select class="form-select" id="user_dashboard_banner" name="user_dashboard_banner" aria-describedby="user_dashboard_banner_Help" required>
+												<option value='true' <?php if($user_dashboard_banner == "true") { echo "selected=\"selected\""; } ?>><?= __("Enabled"); ?></option>
+												<option value='false' <?php if($user_dashboard_banner == "false") { echo "selected=\"selected\""; } ?>><?= __("Disabled"); ?></option>
+											</select>
+											<small id="user_dashboard_banner_Help" class="form-text text-muted"><?= __("This allows to disable the global notification banner on the dashboard."); ?></small>
 										</div>
 									</div>
 								</div>
@@ -653,7 +664,7 @@
 											</div>
 											<div class="form-check form-switch">
 												<input name="user_sig_to_qso_tab" class="form-check-input" type="checkbox" role="switch" id="sigToQsoTab" <?php if ($user_sig_to_qso_tab ?? false) { echo 'checked'; } ?>>
-												<label class="form-check-label" for="sigToQsoTab" ><?= __("Sig"); ?> / <?= __("Sig Info"); ?></label>
+												<label class="form-check-label" for="sigToQsoTab" ><?= __("SIG"); ?> / <?= __("SIG Info"); ?></label>
 											</div>
 											<div class="form-check form-switch">
 												<input name="user_dok_to_qso_tab" class="form-check-input" type="checkbox" role="switch" id="dokToQsoTab" <?php if ($user_dok_to_qso_tab ?? false) { echo 'checked'; } ?>>
@@ -864,7 +875,7 @@
 										<small class="form-text text-muted">
 											<?= sprintf(__("Note: In order to use this widget, you need to have at least one CAT radio configured and working.")); ?>
 											<?php if (isset($on_air_widget_url)) {
-												// when adding user, the $on_air_widget_url url is not yet availalable, hence the if condition here 
+												// when adding user, the $on_air_widget_url url is not yet availalable, hence the if condition here
 												print("<br>");
 												printf(__("When enabled, widget will be available at %s."), "<a href='$on_air_widget_url' target='_blank'>$on_air_widget_url</a>");
 											} ?>

@@ -1,7 +1,7 @@
 function editQsos() {
-	var elements = $('#qsoList tbody input:checked');
-	var nElements = elements.length;
-	if (nElements == 0) {
+	const id_list = getSelectedIds();
+
+	if (id_list.length === 0) {
 		BootstrapDialog.alert({
 			title: 'INFO',
 			message: 'You need to select at least 1 row to use batch edit!',
@@ -13,11 +13,6 @@ function editQsos() {
 		});
 		return;
 	}
-	var id_list=[];
-	elements.each(function() {
-		let id = $(this).closest('tr').attr('id')?.replace(/\D/g, ''); // Removes non-numeric characters
-		id_list.push(id);
-	});
 
 	$('#editButton').prop("disabled", true);
 
@@ -203,8 +198,11 @@ function saveBatchEditQsos(id_list) {
 	if (column == 'region') {
 		value = $("#editRegion").val();
 	}
-	if (column == 'sota' || column == 'pota' || column == 'wwff' || column == 'gridsquare' || column == 'comment' || column == 'operator' || column == 'qslvia' || column == 'qslmsg' || column == 'stationpower') {
+	if (column == 'sota' || column == 'pota' || column == 'wwff' || column == 'gridsquare' || column == 'comment' || column == 'operator' || column == 'qslvia' || column == 'qslmsg' || column == 'stationpower' || column == 'stxstring') {
 		value = $("#editTextInput").val();
+	}
+	if (column == 'distance') {
+		value = $("#editDistanceInput").val();
 	}
 
 	$.ajax({
@@ -258,6 +256,8 @@ function changeEditType(type) {
 	$('#editEqsl').hide();
 	$('#editRegion').hide();
 	$('#editClublog').hide();
+	$('#editDistanceInputLabel').hide();
+	$('#editDistanceInput').hide();
 	if (type == "dxcc") {
 		$('#editDxcc').show();
 	} else if (type == "iota") {
@@ -301,7 +301,7 @@ function changeEditType(type) {
 		$('#editEqsl').show();
 	} else if (type == "continent") {
 		$('#editContinent').show();
-	} else if (type == "gridsquare" || type == "sota" || type == "wwff" || type == "operator" || type == "pota" || type == "comment" || type == "qslvia" || type == "contest" || type == "qslmsg" || type == "stationpower") {
+	} else if (type == "gridsquare" || type == "sota" || type == "wwff" || type == "operator" || type == "pota" || type == "comment" || type == "qslvia" || type == "contest" || type == "qslmsg" || type == "stationpower" || type == 'stxstring') {
 		$('#editTextInput').show();
 	} else if (type == "region") {
 		$('#editRegion').show();
@@ -309,6 +309,9 @@ function changeEditType(type) {
 		$('#editClublog').show();
 	} else if (type == "") {
 		$('#saveButton').prop("disabled", true);
+	} else if (type == "distance") {
+		$('#editDistanceInput').show();
+		$('#editDistanceInputLabel').show();
 	}
 }
 

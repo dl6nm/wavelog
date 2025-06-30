@@ -39,6 +39,8 @@ $('#stationProfile').on('change', function () {
 		data: { 'stationProfile': stationProfile },
 		success: function (res) {
 			$('#transmit_power').val(res.station_power);
+			latlng=[res.lat,res.lng];
+			$("#sat_name").change();
 		},
 		error: function () {
 			$('#transmit_power').val('');
@@ -67,6 +69,7 @@ $('#callsign').on('input', function () {
 	$(this).val($(this).val().replace(/\s/g, ''));
 	$(this).val($(this).val().replace(/0/g, 'Ø'));
 	$(this).val($(this).val().replace(/\./g, '/P'));
+	$(this).val($(this).val().replace(/\ /g, ''));
 });
 
 $('#locator').on('input', function () {
@@ -94,6 +97,15 @@ function set_timers() {
 	}, 100);
 }
 
+function invalidAntEl() {
+	var saveQsoButtonText = $("#saveQso").html();
+	$("#noticer").removeClass("");
+	$("#noticer").addClass("alert alert-warning");
+	$("#noticer").html(lang_invalid_ant_el+" "+parseFloat($("#ant_el").val()).toFixed(1));
+	$("#noticer").show();
+	$("#saveQso").html(saveQsoButtonText).prop("disabled", false);
+}
+
 $("#qso_input").off('submit').on('submit', function (e) {
 	var _submit = true;
 	if ((typeof qso_manual !== "undefined") && (qso_manual == "1")) {
@@ -108,6 +120,7 @@ $("#qso_input").off('submit').on('submit', function (e) {
 			url: base_url + 'index.php/qso' + manual_addon,
 			method: 'POST',
 			type: 'post',
+			timeout: 10000,
 			data: $(this).serialize(),
 			success: function (resdata) {
 				result = JSON.parse(resdata);
@@ -119,14 +132,9 @@ $("#qso_input").off('submit').on('submit', function (e) {
 					$("#noticer").addClass("alert alert-info");
 					$("#noticer").html("QSO Added");
 					$("#noticer").show();
-					reset_fields();
-					htmx.trigger("#qso-last-table", "qso_event")
-					$("#saveQso").html(saveQsoButtonText).prop("disabled", false);
-					$("#callsign").val("");
+					prepare_next_qso(saveQsoButtonText);
 					$("#noticer").fadeOut(2000);
-					var triggerEl = document.querySelector('#myTab a[href="#qso"]')
-					bootstrap.Tab.getInstance(triggerEl).show() // Select tab by name
-					$("#callsign").trigger("focus");
+					processBacklog();	// If we have success with the live-QSO, we could also process the backlog
 				} else {
 					$("#noticer").removeClass("");
 					$("#noticer").addClass("alert alert-warning");
@@ -136,16 +144,68 @@ $("#qso_input").off('submit').on('submit', function (e) {
 				}
 			},
 			error: function () {
+				saveToBacklog(JSON.stringify(this.data),manual_addon);
+				prepare_next_qso(saveQsoButtonText);
 				$("#noticer").removeClass("");
-				$("#noticer").addClass("alert alert-warning");
-				$("#noticer").html("Timeout while adding QSO. NOT added");
+				$("#noticer").addClass("alert alert-info");
+				$("#noticer").html("QSO Added to Backlog");
 				$("#noticer").show();
-				$("#saveQso").html(saveQsoButtonText).prop("disabled", false);
+				$("#noticer").fadeOut(5000);
 			}
 		});
 	}
 	return false;
 });
+
+function prepare_next_qso(saveQsoButtonText) {
+	reset_fields();
+	htmx.trigger("#qso-last-table", "qso_event")
+	$("#saveQso").html(saveQsoButtonText).prop("disabled", false);
+	$("#callsign").val("");
+	var triggerEl = document.querySelector('#myTab a[href="#qso"]')
+	bootstrap.Tab.getInstance(triggerEl).show() // Select tab by name
+	$("#callsign").trigger("focus");
+}
+
+var processingBL=false;
+
+async function processBacklog() {
+	if (!processingBL) {
+		processingBL=true;
+		const Qsobacklog = JSON.parse(localStorage.getItem('qso-backlog')) || [];
+		for (const entry of [...Qsobacklog]) { 
+			try {
+				await $.ajax({url: base_url + 'index.php/qso' + entry.manual_addon,  method: 'POST', type: 'post', data: JSON.parse(entry.data), 
+					success: function(resdata) {
+						Qsobacklog.splice(Qsobacklog.findIndex(e => e.id === entry.id), 1);
+					}, 
+					error: function() { 
+						entry.attempts++;
+					}});
+			} catch (error) {
+				entry.attempts++;
+			}
+		}
+		localStorage.setItem('qso-backlog', JSON.stringify(Qsobacklog));
+		processingBL=false;
+	}
+}
+
+function saveToBacklog(formData,manual_addon) {
+	const backlog = JSON.parse(localStorage.getItem('qso-backlog')) || [];
+	const entry = {
+		id: Date.now(), 
+		timestamp: new Date().toISOString(),
+		data: formData,
+		manual_addon: manual_addon,
+		attempts: 0 
+	};
+	backlog.push(entry);
+	localStorage.setItem('qso-backlog', JSON.stringify(backlog));
+}
+
+window.addEventListener('beforeunload', processBacklog());	// process possible QSO-Backlog on unload of page
+window.addEventListener('pagehide', processBacklog());		// process possible QSO-Backlog on Hide of page (Mobile-Browsers)
 
 $('#reset_time').on("click", function () {
 	var now = new Date();
@@ -217,6 +277,9 @@ $(document).on("click", "#fav_del", function (event) {
 
 $(document).on("click", "#fav_recall", function (event) {
 	$('#sat_name').val(favs[this.innerText].sat_name);
+	if (favs[this.innerText].sat_name) {
+		$("#sat_name").change();
+	}
 	$('#sat_mode').val(favs[this.innerText].sat_mode);
 	$('#band_rx').val(favs[this.innerText].band_rx);
 	$('#band').val(favs[this.innerText].band);
@@ -324,45 +387,146 @@ $("#sat_name").on('change', function () {
 	if (sat == "") {
 		$("#sat_mode").val("");
 		$("#selectPropagation").val("");
+		stop_az_ele_ticker();
+	} else {
+		get_tles();
 	}
 });
 
+
+var satupdater;
+
+function stop_az_ele_ticker() {
+	if (satupdater) {
+		clearInterval(satupdater);
+	}
+	$("#ant_az").val('');
+	$("#ant_el").val('');
+}
+
+function start_az_ele_ticker(tle) {
+	const lines = tle.tle.trim().split('\n');
+
+	// Initialize a satellite record
+	var satrec = satellite.twoline2satrec(lines[0], lines[1]);
+
+	// Define the observer's location in radians
+	var observerGd = {
+		longitude: satellite.degreesToRadians(latlng[1]),
+		latitude: satellite.degreesToRadians(latlng[0]),
+		height: 0.370
+	};
+
+	function updateAzEl() {
+		let dateParts=$('#start_date').val().split("-");
+		let timeParts=$("#start_time").val().split(":");
+		try {
+			var time = new Date(Date.UTC(
+				parseInt(dateParts[2]),parseInt(dateParts[1])-1,parseInt(dateParts[0]),
+				parseInt(timeParts[0]),parseInt(timeParts[1]),(parseInt(timeParts[2] ?? 0))
+			));
+			if (isNaN(time.getTime())) {
+				throw new Error("Invalid date");
+			}
+			var positionAndVelocity = satellite.propagate(satrec, time);
+			var gmst = satellite.gstime(time);
+			var positionEcf = satellite.eciToEcf(positionAndVelocity.position, gmst);
+			var observerEcf = satellite.geodeticToEcf(observerGd);
+			var lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+			let az=(satellite.radiansToDegrees(lookAngles.azimuth).toFixed(2));
+			let el=(satellite.radiansToDegrees(lookAngles.elevation).toFixed(2));
+			$("#ant_az").val(parseFloat(az).toFixed(1));
+			$("#ant_el").val(parseFloat(el).toFixed(1));
+		} catch(e) {
+			$("#ant_az").val('');
+			$("#ant_el").val('');
+		}
+	}
+	satupdater=setInterval(updateAzEl, 1000);
+}
+
+function get_tles() {
+	stop_az_ele_ticker();
+	$.ajax({
+		url: base_url + 'index.php/satellite/get_tle',
+		type: 'post',
+		data: {
+			sat: $("#sat_name").val(),
+		},
+		success: function (data) {
+			if (data !== null) {
+				start_az_ele_ticker(data);
+			}
+		},
+		error: function (data) {
+			console.log('Something went wrong while trying to fetch TLE for sat: '+$("#sat_name"));
+		},
+	});
+}
+
+if ($("#sat_name").val() !== '') {
+	get_tles();
+}
+
 $('#stateDropdown').on('change', function () {
 	var state = $("#stateDropdown option:selected").text();
+	var dxcc = $("#dxcc_id option:selected").val();
+	
 	if (state != "") {
-		$("#stationCntyInputQso").prop('disabled', false);
-
-		$('#stationCntyInputQso').selectize({
-			maxItems: 1,
-			closeAfterSelect: true,
-			loadThrottle: 250,
-			valueField: 'name',
-			labelField: 'name',
-			searchField: 'name',
-			options: [],
-			create: false,
-			load: function (query, callback) {
-				var state = $("#stateDropdown option:selected").text();
-
-				if (!query || state == "") return callback();
-				$.ajax({
-					url: base_url + 'index.php/qso/get_county',
-					type: 'GET',
-					dataType: 'json',
-					data: {
-						query: query,
-						state: state,
-					},
-					error: function () {
-						callback();
-					},
-					success: function (res) {
-						callback(res);
+		switch (dxcc) {
+			case '6':
+			case '110':
+			case '291': 
+				$("#stationCntyInputQso").prop('disabled', false);
+				$('#stationCntyInputQso').selectize({
+					maxItems: 1,
+					closeAfterSelect: true,
+					loadThrottle: 250,
+					valueField: 'name',
+					labelField: 'name',
+					searchField: 'name',
+					options: [],
+					create: false,
+					load: function (query, callback) {
+						var state = $("#stateDropdown option:selected").text();
+		
+						if (!query || state == "") return callback();
+						$.ajax({
+							url: base_url + 'index.php/qso/get_county',
+							type: 'GET',
+							dataType: 'json',
+							data: {
+								query: query,
+								state: state,
+							},
+							error: function () {
+								callback();
+							},
+							success: function (res) {
+								callback(res);
+							}
+						});
 					}
 				});
-			}
-		});
-
+				break;
+			case '15':
+			case '54':
+			case '61':
+			case '126':
+			case '151':
+			case '288':
+			case '339':
+			case '170':
+			case '21':
+			case '29':
+			case '32':
+			case '281':
+				$("#stationCntyInputQso").prop('disabled', false);
+				break;
+			default:
+				$("#stationCntyInputQso").prop('disabled', true);
+		}
+		
 	} else {
 		$("#stationCntyInputQso").prop('disabled', true);
 		//$('#stationCntyInputQso')[0].selectize.destroy();
@@ -516,6 +680,8 @@ function reset_to_default() {
 	$("#sat_mode").val("");
 	$("#ant_az").val("");
 	$("#ant_el").val("");
+	$("#distance").val("");
+	stop_az_ele_ticker();
 }
 
 /* Function: reset_fields is used to reset the fields on the QSO page */
@@ -564,6 +730,7 @@ function reset_fields() {
 	$('#qso-last-table').show();
 	$('#partial_view').hide();
 	$('.callsign-suggest').hide();
+	$("#distance").val("");
 	setRst($(".mode").val());
 	var $select = $('#sota_ref').selectize();
 	var selectize = $select[0].selectize;
@@ -577,6 +744,7 @@ function reset_fields() {
 	var $select = $('#darc_dok').selectize();
 	var selectize = $select[0].selectize;
 	selectize.clear();
+	$('#stationCntyInputQso').val("");
 	$select = $('#stationCntyInputQso').selectize();
 	selectize = $select[0].selectize;
 	selectize.clear();
@@ -596,7 +764,7 @@ function reset_fields() {
 	mymap.setView(pos, 12);
 	mymap.removeLayer(markers);
 	$('.callsign-suggest').hide();
-	$('.dxccsummary').remove();
+	$('.awardpane').remove();
 	$('#timesWorked').html(lang_qso_title_previous_contacts);
 	updateStateDropdown('#dxcc_id', '#stateInputLabel', '#location_us_county', '#stationCntyInputEdit');
 	clearTimeout();
@@ -649,6 +817,10 @@ $("#callsign").on("focusout", function () {
 							$('#callsign').removeClass("confirmedGrid");
 							$('#callsign').removeClass("newGrid");
 							$('#callsign').attr('title', '');
+							$('#ham_of_note_info').text("");
+							$('#ham_of_note_link').html("");
+							$('#ham_of_note_link').removeAttr('href');
+							$('#ham_of_note_line').hide();
 
 							if (result.confirmed) {
 								$('#callsign').addClass("confirmedGrid");
@@ -669,6 +841,10 @@ $("#callsign").on("focusout", function () {
 							$('#callsign').removeClass("workedGrid");
 							$('#callsign').removeClass("newGrid");
 							$('#callsign').attr('title', '');
+							$('#ham_of_note_info').text("");
+							$('#ham_of_note_link').html("");
+							$('#ham_of_note_link').removeAttr('href');
+							$('#ham_of_note_line').hide();
 
 							if (result.confirmed) {
 								$('#callsign').addClass("confirmedGrid");
@@ -701,7 +877,7 @@ $("#callsign").on("focusout", function () {
 					$('#lotw_link').attr('href', "https://lotw.arrl.org/lotwuser/act?act=" + callsign.replace('Ø', '0'));
 					$('#lotw_link').attr('target', "_blank");
 					$('#lotw_info').attr('data-bs-toggle', "tooltip");
-					if (result.lotw_days == 1) { 
+					if (result.lotw_days == 1) {
 						$('#lotw_info').attr('data-bs-original-title', lang_lotw_upload_day_ago);
 					} else {
 						$('#lotw_info').attr('data-bs-original-title', lang_lotw_upload_days_ago.replace('%x', result.lotw_days));
@@ -730,13 +906,37 @@ $("#callsign").on("focusout", function () {
 
 				$.getJSON(base_url + 'index.php/lookup/ham_of_note/' + $('#callsign').val().toUpperCase().replaceAll('Ø', '0').replaceAll('/','-'), function (result) {
 					if (result) {
-						$('#ham_of_note_info').text(result.description);
-						$('#ham_of_note_link').html(result.linkname);
-						$('#ham_of_note_link').attr('href', result.link);
+						$('#ham_of_note_info').html('<span class="minimize">'+result.description+'</span>');
+						if (result.link != null) {
+							$('#ham_of_note_link').html(" "+result.linkname);
+							$('#ham_of_note_link').attr('href', result.link);
+						}
 						$('#ham_of_note_line').show("slow");
+
+						var minimized_elements = $('span.minimize');
+						var maxlen = 50;
+
+						minimized_elements.each(function(){
+							var t = $(this).text();
+							if(t.length < maxlen) return;
+							$(this).html(
+								t.slice(0,maxlen)+'<span>... </span><a href="#" class="more">'+lang_qso_more+'</a><span style="display:none;">'+ t.slice(maxlen,t.length)+' <a href="#" class="less">'+lang_qso_less+'</a></span>'
+							);
+						});
+
+						$('a.more', minimized_elements).click(function(event){
+							event.preventDefault();
+							$(this).hide().prev().hide();
+							$(this).next().show();
+						});
+
+						$('a.less', minimized_elements).click(function(event){
+							event.preventDefault();
+							$(this).parent().hide().prev().show().prev().show();
+						});
+
 					}
 				});
-
 				$('#dxcc_id').val(result.dxcc.adif).multiselect('refresh');
 				await updateStateDropdown('#dxcc_id', '#stateInputLabel', '#location_us_county', '#stationCntyInputEdit');
 				if (result.callsign_cqz != '' && (result.callsign_cqz >= 1 && result.callsign_cqz <= 40)) {
@@ -838,15 +1038,46 @@ $("#callsign").on("focusout", function () {
 				}
 
 				/*
-					* Update county with returned value
+					* Update county with returned value for USA only for now
+					* and make sure control is enabled for others 
+					* with cnty info
 					*/
-				selectize_usa_county('#stateDropdown', '#stationCntyInputQso');
-				if ($('#stationCntyInputQso').has('option').length == 0 && result.callsign_us_county != "") {
-					var county_select = $('#stationCntyInputQso').selectize();
-					var county_selectize = county_select[0].selectize;
-					county_selectize.addOption({ name: result.callsign_us_county });
-					county_selectize.setValue(result.callsign_us_county, false);
-				}
+				var dxcc = $('#dxcc_id').val();
+				switch (dxcc) {
+					case '6':
+					case '110':
+					case '291': 
+						selectize_usa_county('#stateDropdown', '#stationCntyInputQso');
+						if ($('#stationCntyInputQso').has('option').length == 0 && result.callsign_us_county != "") {
+							var county_select = $('#stationCntyInputQso').selectize();
+							var county_selectize = county_select[0].selectize;
+							county_selectize.addOption({ name: result.callsign_us_county });
+							county_selectize.setValue(result.callsign_us_county, false);
+						}
+						break;
+					case '15':
+					case '54':
+					case '61':
+					case '126':
+					case '151':
+					case '288':
+					case '339':
+					case '170':
+					case '21':
+					case '29':
+					case '32':
+					case '281':
+						if (result.callsign_state == "") {
+							$("#stationCntyInputQso").prop('disabled', true);
+						} else {
+							$("#stationCntyInputQso").prop('disabled', false);
+							$("#stationCntyInputQso").val(result.callsign_us_county);
+						}
+						break;
+					default:
+						$("#stationCntyInputQso").prop('disabled', false);
+					}
+				
 
 				if (result.timesWorked != "") {
 					if (result.timesWorked == '0') {
@@ -866,9 +1097,11 @@ $("#callsign").on("focusout", function () {
 				/* display past QSOs */
 				$('#partial_view').html(result.partial);
 
-				// Get DXX Summary
-				getDxccResult(result.dxcc.adif, convert_case(result.dxcc.entity));
-			} 
+				// Get DXCC Summary
+				loadAwardTabs(function() {
+					getDxccResult(result.dxcc.adif, convert_case(result.dxcc.entity));
+				});
+			}
 			// else {
 			// 	console.log("Callsigns do not match, skipping lookup");
 			// 	console.log("Typed Callsign: " + $('#callsign').val());
@@ -880,6 +1113,448 @@ $("#callsign").on("focusout", function () {
 		resetDefaultQSOFields();
 	}
 })
+
+// This function executes the call to the backend for fetching cq summary and inserted table below qso entry
+function getCqResult() {
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'cq',
+			cqz: $('#cqz').val(),
+			reduced_mode: true,
+			current_band: satOrBand,
+			current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+            $('#cq-summary').empty();
+			$('#cq-summary').append(lang_summary_cq + ' ' + $('#cqz').val() + '.');
+            $('#cq-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching was summary and inserted table below qso entry
+function getWasResult() {
+	$('#state-summary').empty();
+	if ($('#stateDropdown').val() === '') {
+		$('#state-summary').append(lang_summary_warning_empty_state);
+		return;
+	}
+
+	let dxccid = $('#dxcc_id').val();
+	if (!['291', '6', '110'].includes(dxccid)) {
+		$('#state-summary').append(lang_summary_state_valid);
+		return;
+	}
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'was',
+			was: $('#stateDropdown').val(),
+			reduced_mode: true,
+			current_band: satOrBand,
+			current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#state-summary').append(lang_summary_state + ' ' + $('#stateDropdown').val() + '.');
+            $('#state-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching sota summary and inserted table below qso entry
+function getSotaResult() {
+	$('#sota-summary').empty();
+	if ($('#sota_ref').val() === '') {
+		$('#sota-summary').append(lang_summary_warning_empty_sota);
+		return;
+	}
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'sota',
+			sota: $('#sota_ref').val(),
+			reduced_mode: true,
+			current_band: satOrBand,
+			current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#sota-summary').append(lang_summary_sota + ' ' + $('#sota_ref').val() + '.');
+            $('#sota-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching pota summary and inserted table below qso entry
+function getPotaResult() {
+	let potaref = $('#pota_ref').val();
+	$('#pota-summary').empty();
+	if (potaref === '') {
+		$('#pota-summary').append(lang_summary_warning_empty_pota);
+		return;
+	}
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	if (potaref.includes(',')) {
+		let values = potaref.split(',').map(function(v) {
+            return v.trim();
+        }).filter(function(v) {
+            return v;
+        });
+		let tabContent = $('#pota-summary'); // Tab content container
+		tabContent.append('<div class="card"><div class="card-header"><ul style="font-size: 15px;" class="nav nav-tabs card-header-tabs pull-right" id="awardPotaTab" role="tablist"></ul></div></div>');
+		tabContent.append('<div class="card-body"><div class="tab-content potatablist"></div>');
+
+		values.forEach(function(value, index) {
+			let tabId = `pota-tab-${index}`;
+			let contentId = `pota-content-${index}`;
+
+			// Append new tab
+			$('#awardPotaTab').append(`
+				<li class="nav-item">
+					<a class="nav-link ${index === 0 ? 'active' : ''}" id="${tabId}-tab" data-bs-toggle="tab" href="#${contentId}" role="tab" aria-controls="${contentId}" aria-selected="${index === 0}">
+						${value.toUpperCase()}
+					</a>
+				</li>
+			`);
+
+			// Append new tab content
+			$('.potatablist').append(`
+				<div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="${contentId}" role="tabpanel" aria-labelledby="${tabId}-tab">
+				</div>
+			`);
+
+			// Make AJAX request
+			$.ajax({
+				url: base_url + 'index.php/lookup/search',
+				type: 'POST',
+				data: { type: 'pota',
+						pota: value.trim(),
+						reduced_mode: true,
+						current_band: satOrBand,
+						current_mode: $('#mode').val()
+					},
+				success: function(response) {
+					$(`#${contentId}`).html(response); // Append response to correct tab
+				},
+				error: function(xhr, status, error) {
+					$(`#${contentId}`).html(`<div class="text-danger">Error loading data for ${value}</div>`);
+				}
+			});
+		});
+		return;
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'pota',
+			pota: potaref,
+			reduced_mode: true,
+			current_band: satOrBand,
+			current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#pota-summary').append(lang_summary_pota + ' ' + potaref + '.');
+            $('#pota-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching continent summary and inserted table below qso entry
+function getContinentResult() {
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'continent',
+			continent: $('#continent').val(),
+				reduced_mode: true,
+				current_band: satOrBand,
+				current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+            $('#continent-summary').empty();
+			$('#continent-summary').append(lang_summary_continent + ' ' + $('#continent').val() + '.');
+            $('#continent-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching iota summary and inserted table below qso entry
+function getIotaResult() {
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$('#iota-summary').empty();
+	if ($('#iota_ref').val() === '') {
+		$('#iota-summary').append(lang_summary_warning_empty_iota);
+		return;
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'iota',
+			iota: $('#iota_ref').val(),
+				reduced_mode: true,
+				current_band: satOrBand,
+				current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#iota-summary').append(lang_summary_iota + ' ' + $('#iota_ref').val() + '.');
+            $('#iota-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching wwff summary and inserted table below qso entry
+function getWwffResult() {
+	$('#wwff-summary').empty();
+	if ($('#wwff_ref').val() === '') {
+		$('#wwff-summary').append(lang_summary_warning_empty_wwff);
+		return;
+	}
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'wwff',
+			wwff: $('#wwff_ref').val(),
+				reduced_mode: true,
+				current_band: satOrBand,
+				current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#wwff-summary').append(lang_summary_wwff + ' ' + $('#wwff_ref').val() + '.');
+            $('#wwff-summary').append(html);
+		}
+	});
+}
+
+// This function executes the call to the backend for fetching gridsquare summary and inserted table below qso entry
+function getGridsquareResult() {
+	$('#gridsquare-summary').empty();
+	if ($('#locator').val() === '') {
+		$('#gridsquare-summary').append(lang_summary_warning_empty_gridsquare);
+		return;
+	}
+	satOrBand = $('#band').val();
+	if ($('#selectPropagation').val() == 'SAT') {
+		satOrBand = 'SAT';
+	}
+	if ($('#locator').val().includes(',')) {
+		let values = $('#locator').val().split(',').map(function(v) {
+            return v.trim();
+        }).filter(function(v) {
+            return v;
+        });
+		let tabContent = $('#gridsquare-summary'); // Tab content container
+		tabContent.append('<div class="card"><div class="card-header"><ul style="font-size: 15px;" class="nav nav-tabs card-header-tabs pull-right" id="awardGridTab" role="tablist"></ul></div></div>');
+		tabContent.append('<div class="card-body"><div class="tab-content gridtablist"></div>');
+
+		values.forEach(function(value, index) {
+			let tabId = `grid-tab-${index}`;
+			let contentId = `grid-content-${index}`;
+
+			// Append new tab
+			$('#awardGridTab').append(`
+				<li class="nav-item">
+					<a class="nav-link ${index === 0 ? 'active' : ''}" id="${tabId}-tab" data-bs-toggle="tab" href="#${contentId}" role="tab" aria-controls="${contentId}" aria-selected="${index === 0}">
+						${value.toUpperCase()}
+					</a>
+				</li>
+			`);
+
+			// Append new tab content
+			$('.gridtablist').append(`
+				<div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="${contentId}" role="tabpanel" aria-labelledby="${tabId}-tab">
+				</div>
+			`);
+
+			// Make AJAX request
+			$.ajax({
+				url: base_url + 'index.php/lookup/search',
+				type: 'POST',
+				data: { type: 'vucc',
+						grid: value.trim(),
+						reduced_mode: true,
+						current_band: satOrBand,
+						current_mode: $('#mode').val()
+					},
+				success: function(response) {
+					$(`#${contentId}`).html(response); // Append response to correct tab
+				},
+				error: function(xhr, status, error) {
+					$(`#${contentId}`).html(`<div class="text-danger">Error loading data for ${value}</div>`);
+				}
+			});
+		});
+		return;
+	}
+	$.ajax({
+		url: base_url + 'index.php/lookup/search',
+		type: 'post',
+		data: {
+			type: 'vucc',
+			grid: $('#locator').val(),
+				reduced_mode: true,
+				current_band: satOrBand,
+				current_mode: $('#mode').val(),
+		},
+		success: function (html) {
+			$('#gridsquare-summary').append(lang_summary_gridsquare + ' ' + $('#locator').val().substring(0, 4) + '.');
+            $('#gridsquare-summary').append(html);
+		}
+	});
+}
+
+function loadAwardTabs(callback) {
+    $.ajax({
+        url: base_url + 'index.php/qso/getAwardTabs',
+        type: 'post',
+        data: {},
+        success: function (html) {
+            $('.awardpane').remove();
+            $('.qsopane').append('<div class="awardpane col-sm-12"></div>');
+            $('.awardpane').append(html);
+
+            // Execute callback if provided
+            if (typeof callback === "function") {
+                callback();
+            }
+
+			$("a[href='#cq-summary']").on('shown.bs.tab', function (e) {
+				let $targetPane = $('#cq-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getCqResult();
+				}
+			});
+
+			$("a[href='#state-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#state-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getWasResult();
+				}
+			});
+
+			$("a[href='#pota-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#pota-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getPotaResult();
+				}
+			});
+
+			$("a[href='#continent-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#continent-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getContinentResult();
+				}
+			});
+
+			$("a[href='#sota-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#sota-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getSotaResult();
+				}
+			});
+
+			$("a[href='#gridsquare-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#gridsquare-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getGridsquareResult();
+				}
+			});
+
+			$("a[href='#wwff-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#wwff-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getWwffResult();
+				}
+			});
+
+			$("a[href='#iota-summary']").on('shown.bs.tab', function(e) {
+				let $targetPane = $('#iota-summary');
+
+				if (!$targetPane.data("loaded")) {
+					$targetPane.data("loaded", true); // Mark as loaded
+					getIotaResult();
+				}
+			});
+
+			$('.dxcc-summary-reload').click(function (event) {
+				let $targetPane = $('#dxcc-summary');
+				$targetPane.data("loaded", false); // Mark as loaded
+				getDxccResult($('#dxcc_id').val(), $('#dxcc_id option:selected').text());
+			});
+			$('.iota-summary-reload').click(function (event) {
+				getIotaResult();
+			});
+			$('.wwff-summary-reload').click(function (event) {
+				getWwffResult();
+			});
+			$('.pota-summary-reload').click(function (event) {
+				getPotaResult();
+			});
+			$('.sota-summary-reload').click(function (event) {
+				getSotaResult();
+			});
+			$('.cq-summary-reload').click(function (event) {
+				getCqResult();
+			});
+			$('.state-summary-reload').click(function (event) {
+				getWasResult();
+			});
+			$('.continent-summary-reload').click(function (event) {
+				getContinentResult();
+			});
+			$('.gridsquare-summary-reload').click(function (event) {
+				getGridsquareResult();
+			});
+        }
+    });
+}
+
 
 /* time input shortcut */
 $('#start_time').on('change', function () {
@@ -939,6 +1614,7 @@ $('#band').on('change', function () {
 	$("#sat_mode").val("");
 	set_qrg();
 	$("#callsign").blur();
+	stop_az_ele_ticker();
 });
 
 /* On Key up Calculate Bearing and Distance */
@@ -1210,6 +1886,7 @@ function resetDefaultQSOFields() {
 	$('#locator_info').text("");
 	$('#country').val("");
 	$('#continent').val("");
+	$("#distance").val("");
 	$('#email').val("");
 	$('#region').val("");
 	$('#dxcc_id').val("").multiselect('refresh');
@@ -1232,7 +1909,7 @@ function resetDefaultQSOFields() {
 	$('#stateDropdown').val("");
 	$('#callsign-image').attr('style', 'display: none;');
 	$('#callsign-image-content').text("");
-	$('.dxccsummary').remove();
+	$('.awardpane').remove();
 	$('#timesWorked').html(lang_qso_title_previous_contacts);
 }
 
@@ -1290,13 +1967,19 @@ $(document).ready(function () {
 	set_timers();
 	updateStateDropdown('#dxcc_id', '#stateInputLabel', '#location_us_county', '#stationCntyInputQso');
 
-	// Clear the localStorage for the qrg units, except the quicklogCallsign
+	// Clear the localStorage for the qrg units, except the quicklogCallsign and a possible backlog
 	let quicklogCallsign = localStorage.getItem('quicklogCallsign');
+	let QsoBacklog = localStorage.getItem('qso-backlog');
+
 	localStorage.clear();
 	if (quicklogCallsign) {
 		localStorage.setItem('quicklogCallsign', quicklogCallsign);
 	}
 	set_qrg();
+
+	if (QsoBacklog) {
+		localStorage.setItem('qso-backlog', QsoBacklog);
+	}
 
 	$("#locator").popover({ placement: 'top', title: 'Gridsquare Formatting', content: "Enter multiple (4-digit) grids separated with commas. For example: IO77,IO78" })
 	.focus(function () {

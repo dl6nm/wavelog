@@ -15,97 +15,105 @@ function setRst(mode) {
 }
 
 function qsl_rcvd(id, method) {
-    $(".ld-ext-right-r-"+method).addClass('running');
-    $(".ld-ext-right-r-"+method).prop('disabled', true);
-    $.ajax({
-        url: base_url + 'index.php/qso/qsl_rcvd_ajax',
-        type: 'post',
-        data: {'id': id,
-            'method': method
-        },
-        success: function(data) {
-            $(".ld-ext-right-r-"+method).removeClass('running');
-            $(".ld-ext-right-r-"+method).prop('disabled', false);
-            if (data.message == 'OK') {
-                $("#qsl_" + id).find("span:eq(1)").attr('class', 'qsl-green'); // Paints arrow green
-                $("#qrz_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // marks the QRZ Upload as modified
-                $(".qsl_rcvd_" + id).remove(); // removes choice from menu
-            }
-            else {
-                $(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
-            }
-        }
-    });
+	$(".ld-ext-right-r-"+method).addClass('running');
+	$(".ld-ext-right-r-"+method).prop('disabled', true);
+	$.ajax({
+		url: base_url + 'index.php/qso/qsl_rcvd_ajax',
+		type: 'post',
+		data: {'id': id,
+			'method': method
+		},
+		success: function(data) {
+			$(".ld-ext-right-r-"+method).removeClass('running');
+			$(".ld-ext-right-r-"+method).prop('disabled', false);
+			if (data.message == 'OK') {
+				$("#qsl_" + id).find("span:eq(1)").attr('class', 'qsl-green'); // Paints arrow green
+				if ($("#qrz_"+ id).find("span:eq(0)").hasClass("qrz-green")) {
+					$("#qrz_" + id).find("span:eq(0)").attr('class', 'qrz-yellow'); // marks the QRZ Upload as modified
+				}
+				$(".qsl_rcvd_" + id).remove(); // removes choice from menu
+			}
+			else {
+				$(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
+			}
+		}
+	});
 }
 
 function qsl_sent(id, method) {
-    $.ajax({
-        url: base_url + 'index.php/qso/qsl_sent_ajax',
-        type: 'post',
-        data: {'id': id,
-            'method': method
-        },
-        success: function(data) {
-            if (data.message == 'OK') {
-                $("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-green'); // Paints arrow green
-                $("#qrz_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // marks the QRZ Upload as modified
-                $(".qsl_sent_" + id).remove(); // removes choice from menu
-            }
-            else {
-                $(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
-            }
-        }
-    });
+	$.ajax({
+		url: base_url + 'index.php/qso/qsl_sent_ajax',
+		type: 'post',
+		data: {'id': id,
+			'method': method
+		},
+		success: function(data) {
+			if (data.message == 'OK') {
+				$("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-green'); // Paints arrow green
+				if ($("#qrz_"+ id).find("span:eq(0)").hasClass("qrz-green")) {
+					$("#qrz_" + id).find("span:eq(0)").attr('class', 'qrz-yellow'); // marks the QRZ Upload as modified
+				}
+				$(".qsl_sent_" + id).remove(); // removes choice from menu
+			}
+			else {
+				$(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
+			}
+		}
+	});
 }
 
 // Function: qsl_requested
 // Marks QSL card requested against the QSO.
 function qsl_requested(id, method) {
-    $(".ld-ext-right-t-"+method).addClass('running');
-    $(".ld-ext-right-t-"+method).prop('disabled', true);
-    $.ajax({
-        url: base_url + 'index.php/qso/qsl_requested_ajax',
-        type: 'post',
-        data: {'id': id,
-            'method': method
-        },
-        success: function(data) {
-            $(".ld-ext-right-t-"+method).removeClass('running');
-            $(".ld-ext-right-t-"+method).prop('disabled', false);
-            if (data.message == 'OK') {
-                $("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // Paints arrow yellow
-                $("#qrz_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // marks the QRZ Upload as modified
-            }
-            else {
-                $(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
-            }
-        }
-    });
+	$(".ld-ext-right-t-"+method).addClass('running');
+	$(".ld-ext-right-t-"+method).prop('disabled', true);
+	$.ajax({
+		url: base_url + 'index.php/qso/qsl_requested_ajax',
+		type: 'post',
+		data: {'id': id,
+			'method': method
+		},
+		success: function(data) {
+			$(".ld-ext-right-t-"+method).removeClass('running');
+			$(".ld-ext-right-t-"+method).prop('disabled', false);
+			if (data.message == 'OK') {
+				$("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // Paints arrow yellow
+				if ($("#qrz_"+ id).find("span:eq(0)").hasClass("qrz-green")) {
+					$("#qrz_" + id).find("span:eq(0)").attr('class', 'qrz-yellow'); // marks the QRZ Upload as modified
+				}
+			}
+			else {
+				$(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
+			}
+		}
+	});
 }
 
 // Function: qsl_ignore
 // Marks QSL card ignore against the QSO.
 function qsl_ignore(id, method) {
-    $(".ld-ext-right-ignore").addClass('running');
-    $(".ld-ext-right-ignore").prop('disabled', true);
-    $.ajax({
-        url: base_url + 'index.php/qso/qsl_ignore_ajax',
-        type: 'post',
-        data: {'id': id,
-            'method': method
-        },
-        success: function(data) {
-            $(".ld-ext-right-ignore").removeClass('running');
-            $(".ld-ext-right-ignore").prop('disabled', false);
-            if (data.message == 'OK') {
-                $("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-grey'); // Paints arrow grey
-                $("#qrz_" + id).find("span:eq(0)").attr('class', 'qsl-yellow'); // marks the QRZ Upload as modified
-            }
-            else {
-                $(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
-            }
-        }
-    });
+	$(".ld-ext-right-ignore").addClass('running');
+	$(".ld-ext-right-ignore").prop('disabled', true);
+	$.ajax({
+		url: base_url + 'index.php/qso/qsl_ignore_ajax',
+		type: 'post',
+		data: {'id': id,
+			'method': method
+		},
+		success: function(data) {
+			$(".ld-ext-right-ignore").removeClass('running');
+			$(".ld-ext-right-ignore").prop('disabled', false);
+			if (data.message == 'OK') {
+				$("#qsl_" + id).find("span:eq(0)").attr('class', 'qsl-grey'); // Paints arrow grey
+				if ($("#qrz_"+ id).find("span:eq(0)").hasClass("qrz-green")) {
+					$("#qrz_" + id).find("span:eq(0)").attr('class', 'qrz-yellow'); // marks the QRZ Upload as modified
+				}
+			}
+			else {
+				$(".bootstrap-dialog-message").append('<div class="alert alert-danger"><a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>You are not allowed to update QSL status!</div>');
+			}
+		}
+	});
 }
 
 function displayQso(id) {
@@ -273,16 +281,35 @@ function qso_edit(id) {
 
                     $('[data-bs-toggle="tooltip"]').tooltip();
 
-                    if ($('#dxcc_id_edit').val() == '291' || $('#dxcc_id_edit').val() == '110' || $('#dxcc_id_edit').val() == '6') {
-                        $('#location_us_county_edit').show();
-                    } else {
-                        $('#location_us_county_edit').hide();
-                    }
-
+                    var dxcc = $('#dxcc_id_edit').val();
                     var state = $("#stateDropdownEdit option:selected").text();
-                    if (state != "") {
-                        $("#stationCntyInputEdit").prop('disabled', false);
-                        selectize_usa_county('#stateDropdown', '#stationCntyInputEdit');
+                    switch (dxcc) {
+                       case '6':
+                       case '110':
+                       case '291':
+                          if (state != "") {
+                             $("#stationCntyInputEdit").prop('disabled', false);
+                             selectize_usa_county('#stateDropdown', '#stationCntyInputEdit');
+                          }
+                          $('#location_us_county_edit').show();
+                          break;
+                       case '15':
+                       case '54':
+                       case '61':
+                       case '126':
+                       case '151':
+                       case '288':
+                       case '339':
+                       case '170':
+                       case '21':
+                       case '29':
+                       case '32':
+                       case '281':
+                          $("#stationCntyInputEdit").prop('disabled', false);
+                          $('#location_us_county_edit').show();
+                          break;
+                       default:
+                          $('#location_us_county_edit').show();
                     }
 
                     var unsupported_lotw_prop_modes = [];
@@ -312,15 +339,36 @@ function qso_edit(id) {
                     });
 
                     $('#stateDropdownEdit').change(function(){
+                        var dxcc = $('#dxcc_id_edit').val();
+                       console.log("TEST: "+dxcc);
                         var state = $("#stateDropdownEdit option:selected").text();
-                        if (state != "") {
-                            $("#stationCntyInputEdit").prop('disabled', false);
-
-                            selectize_usa_county('#stateDropdownEdit', '#stationCntyInputEdit');
-
-                        } else {
-                            $("#stationCntyInputEdit").prop('disabled', true);
-                            $("#stationCntyInputEdit").val("");
+                        switch (dxcc) {
+                            case '6':
+                            case '110':
+                            case '291':
+                                 if (state != "") {
+                                     $("#stationCntyInputEdit").prop('disabled', false);
+                                     selectize_usa_county('#stateDropdownEdit', '#stationCntyInputEdit');
+                                 }
+                                 break;
+                            case '15':
+                            case '54':
+                            case '61':
+                            case '126':
+                            case '151':
+                            case '288':
+                            case '339':
+                            case '170':
+                            case '21':
+                            case '29':
+                            case '32':
+                            case '281':
+								 if (state != "") {
+									 $("#stationCntyInputEdit").prop('disabled', false);
+								 } else {
+									 $("#stationCntyInputEdit").prop('disabled', true);
+								 }
+                                 break;
                         }
                     });
 
@@ -569,10 +617,10 @@ function selectize_usa_county(state_field, county_field) {
         searchField: 'name',
         options: [],
         create: false,
+        preload: true,
         load: function(query, callback) {
             var state = $(state_field + ' option:selected').text();
 
-            if (!query || state == "") return callback();
             $.ajax({
                 url: base_url + 'index.php/lookup/get_county',
                 type: 'GET',
@@ -594,7 +642,8 @@ function selectize_usa_county(state_field, county_field) {
 
 async function updateStateDropdown(dxcc_field, state_label, county_div, county_input, dropdown = '#stateDropdown') {
     var selectedDxcc = $(dxcc_field);
-
+	var selectedState = $(dropdown);
+	
     if (selectedDxcc.val() !== "") {
         await $.ajax({
             url: base_url + "index.php/lookup/get_state_list",
@@ -615,12 +664,40 @@ async function updateStateDropdown(dxcc_field, state_label, county_div, county_i
         });
     }
 
-    if (selectedDxcc.val() == '291' || selectedDxcc.val() == '110' || selectedDxcc.val() == '6') {
-        $(county_div).show();
-    } else {
-        $(county_div).hide();
-        $(county_input).val();
-    }
+	switch (selectedDxcc.val()) {
+		case '6':
+		case '110':
+		case '291': 
+			$(county_div).find('.form-control').hide();
+			$(county_div).find('.selectize-control').show();
+			$(county_div).show();
+			break;
+		case '15':
+		case '54':
+		case '61':
+		case '126':
+		case '151':
+		case '288':
+		case '339':
+		case '170':
+		case '21':
+		case '29':
+		case '32':
+		case '281':
+			$(county_div).find('.form-control').show();
+			var state = selectedState.val();
+			if (state == '') {
+				$(county_div).find('.form-control').prop('disabled', true);
+			} else {
+				$(county_div).find('.form-control').prop('disabled', false);
+			}
+			$(county_div).find('.selectize-control').hide();
+			$(county_div).show();
+			break;
+		default:
+			$(county_div).hide();
+			$(county_input).val('');
+	}
 }
 
 function spawnQrbCalculator(locator1, locator2) {
@@ -831,25 +908,31 @@ function getLookupResult() {
 
 // This function executes the call to the backend for fetching dxcc summary and inserted table below qso entry
 function getDxccResult(dxcc, name) {
-	$.ajax({
-		url: base_url + 'index.php/lookup/search',
-		type: 'post',
-		data: {
-			type: 'dxcc',
-			dxcc: dxcc,
-            reduced_mode: true,
-            current_band: $('#band').val(),
-            current_mode: $('#mode').val(),
-		},
-		success: function (html) {
-			$('.dxccsummary').remove();
-            $('.qsopane').append('<div class="dxccsummary col-sm-12"><br><div class="card"><div class="card-header dxccsummaryheader" data-bs-toggle="collapse" data-bs-target=".dxccsummarybody">' + lang_dxccsummary_for + name + '</div><div class="card-body collapse dxccsummarybody"></div></div></div>');
-            $('.dxccsummarybody').append(html);
-			$('.dxccsummaryheader').click(function(){
-				$('.dxccsummaryheader').toggleClass('dxccsummaryheaderopened');
-			});
-		}
-	});
+	let $targetPane = $('#dxcc-summary');
+
+	if (!$targetPane.data("loaded")) {
+		$targetPane.data("loaded", true); // Mark as loaded
+			satOrBand = $('#band').val();
+			if ($('#selectPropagation').val() == 'SAT') {
+				satOrBand = 'SAT';
+			}
+		$.ajax({
+			url: base_url + 'index.php/lookup/search',
+			type: 'post',
+			data: {
+				type: 'dxcc',
+				dxcc: dxcc,
+				reduced_mode: true,
+				current_band: satOrBand,
+				current_mode: $('#mode').val(),
+			},
+			success: function (html) {
+				$('#dxcc-summary').empty();
+				$('#dxcc-summary').append(lang_summary_dxcc + ' ' + name + '.');
+				$('#dxcc-summary').append(html);
+			}
+		});
+	}
 }
 
 function displayQsl(id) {

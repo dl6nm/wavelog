@@ -141,6 +141,29 @@ class API extends CI_Controller {
 		}
 	}
 
+	function check_auth($key) {
+		$this->load->model('api_model');
+			header("Content-type: text/xml");
+		if($this->api_model->access($key) == "No Key Found" || $this->api_model->access($key) == "Key Disabled") {
+			// set the content type as json
+			header("Content-type: application/json");
+
+			// set the http response code to 401
+			http_response_code(401);
+
+			// return the json with the status as failed
+			echo json_encode(['status' => 'failed', 'reason' => "missing or invalid api key"]);
+		} else {
+			// set the content type as json
+			header("Content-type: application/json");
+
+			// set the http response code to 200
+			http_response_code(200);
+			// return the json
+			echo json_encode(['status' => 'valid', 'rights' => $this->api_model->access($key)]);
+		}
+	}
+
 
 	/*
 	*
@@ -168,14 +191,16 @@ class API extends CI_Controller {
 		$raw = file_get_contents("php://input");
 		$raw = $raw = preg_replace('#<([eE][oO][rR])>[\r\n\t]+#', '<$1>', $raw);
 		$obj = json_decode($raw,true);
-		$raw='';
 		if ($obj === NULL) {
+		    log_message("Debug",'API Call 200. Wrong JSON provided: '.$raw);
 		    echo json_encode(['status' => 'failed', 'reason' => "wrong JSON"]);
 		    die();
 		}
+		$raw='';
 
 		if(!isset($obj['key']) || $this->api_model->authorize($obj['key']) == 0) {
 		   http_response_code(401);
+		   log_message("Debug",'API Call 401. Invalid API Key: '.($obj['key'] ?? 'N/A'));
 		   echo json_encode(['status' => 'failed', 'reason' => "missing or wrong api key"]);
 		   die();
 		}
@@ -205,6 +230,7 @@ class API extends CI_Controller {
 
 		if(!isset($obj['station_profile_id']) || $this->stations->check_station_against_user($obj['station_profile_id'], $userid) == false) {
 			http_response_code(401);
+			log_message("Debug",'API Call 401: Wrong station_id '.($obj['station_profile_id'] ?? 'N/A').' for User '.$userid);
 			echo json_encode(['status' => 'failed', 'reason' => "station id does not belong to the API key owner."]);
 			die();
 		}
@@ -263,9 +289,11 @@ class API extends CI_Controller {
 
 			if ($adif_errors == 0) {
 				http_response_code(201);
+				log_message("Debug",'API Call 201: QSO created for Station-ID: '.($obj['station_profile_id'] ?? 'N/A').' and User: '.$userid);
 				echo json_encode(['status' => 'created', 'type' => $obj['type'], 'string' => $obj['string'], 'adif_count' => $adif_count, 'adif_errors' => $adif_errors, 'messages' => $return_msg ]);
 			} else {
 				$return_msg[]=$custom_errors;
+				log_message("Debug",'API Call 400: QSO NOT created for Station-ID: '.($obj['station_profile_id'] ?? 'N/A').' and User: '.$userid.' Reason: '.implode($return_msg));
 				http_response_code(400);
 				echo json_encode(['status' => 'abort', 'type' => $obj['type'], 'string' => $obj['string'], 'adif_count' => $adif_count, 'adif_errors' => $adif_errors, 'messages' => $return_msg ]);
 			}
@@ -613,6 +641,14 @@ class API extends CI_Controller {
 			case 'RTTY-U':
 			case 'RTTY-R':
 				$obj['mode'] = 'RTTY';
+				break;
+			case 'USB-D':
+			case 'USB-D1':
+				$obj['mode'] = 'USB';
+				break;
+			case 'LSB-D':
+			case 'LSB-D1':
+				$obj['mode'] = 'LSB';
 				break;
 		}
 
